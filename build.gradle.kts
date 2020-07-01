@@ -11,7 +11,7 @@ repositories {
 }
 
 dependencies {
-    implementation(kotlin("stdlib"))
+    implementation(kotlin("stdlib-jdk8"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.7")
 
     implementation("io.micronaut:micronaut-runtime:2.0.0")
@@ -19,7 +19,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.2.3")
 
     implementation("io.micronaut.gcp:micronaut-gcp-common:2.0.0")
-    implementation("com.google.cloud:google-cloud-monitoring:1.100.1")
+    implementation("com.google.cloud:google-cloud-errorreporting:0.120.0-beta")
     implementation("com.google.cloud:google-cloud-build:2.0.0")
 
     runtimeOnly("com.fasterxml.jackson.module:jackson-module-kotlin:2.11.0")

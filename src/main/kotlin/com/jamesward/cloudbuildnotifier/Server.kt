@@ -23,12 +23,10 @@ import com.fasterxml.jackson.core.Version
 import com.fasterxml.jackson.databind.*
 import com.fasterxml.jackson.databind.deser.BeanDeserializerModifier
 import com.fasterxml.jackson.databind.deser.ResolvableDeserializer
-import com.google.api.LabelDescriptor
-import com.google.api.Metric
-import com.google.api.MetricDescriptor
-import com.google.api.MonitoredResource
-import com.google.cloud.monitoring.v3.MetricServiceClient
-import com.google.monitoring.v3.*
+import com.google.cloud.errorreporting.v1beta1.ErrorGroupServiceClient
+import com.google.cloud.errorreporting.v1beta1.ErrorStatsServiceClient
+import com.google.cloud.errorreporting.v1beta1.ReportErrorsServiceClient
+import com.google.devtools.clouderrorreporting.v1beta1.*
 import com.google.protobuf.util.Timestamps
 import io.micronaut.http.HttpRequest
 import io.micronaut.http.HttpResponse
@@ -42,7 +40,6 @@ import io.micronaut.runtime.Micronaut.build
 import org.slf4j.LoggerFactory
 import javax.inject.Inject
 import javax.inject.Singleton
-
 
 fun main(args: Array<String>) {
     build()
@@ -144,67 +141,42 @@ class BuildMetrics {
 
     fun send(build: Build) {
         if (build.status == BuildStatus.SUCCESS || build.status == BuildStatus.FAILURE) {
+            val projectName = ProjectName.of(build.projectId)
 
-            try {
-                val metricServiceClient = MetricServiceClient.create()
+            val service = "github.com/asdf/${build.repoName}"
+            val version = build.buildTriggerId
 
-                val project = ProjectName.of(build.projectId)
-
-                val metricType = "custom.googleapis.com/cloud-build-notifier-asdf"
-
-                val descriptor = MetricDescriptor.newBuilder()
-                        .setType(metricType)
-                        .addLabels(
-                                LabelDescriptor.newBuilder()
-                                        .setKey("repo_name")
-                                        .setValueType(LabelDescriptor.ValueType.STRING)
-                        )
-                        .setDescription("This is a simple example of a custom metric.")
-                        .setMetricKind(MetricDescriptor.MetricKind.GAUGE)
-                        .setValueType(MetricDescriptor.ValueType.BOOL)
-                        .build()
-
-                val createMetricDescriptorRequest = CreateMetricDescriptorRequest.newBuilder()
-                        .setName(project.toString())
-                        .setMetricDescriptor(descriptor)
-                        .build()
-
-                metricServiceClient.createMetricDescriptor(createMetricDescriptorRequest)
-
-
-                val metricLabels = mapOf(
-                        // todo: duration
-                        "repo_name" to build.repoName,
-                        "log_url" to build.logUrl,
-                        "commit_sha" to build.commitSha,
-                        "branchName" to build.branchName,
-                        "build_trigger_id" to build.buildTriggerId,
-                        "build_id" to build.id
-                )
-
-                val metric = Metric.newBuilder().setType(metricType).putAllLabels(metricLabels).build()
-
-                val resourceLabels = mapOf(
-                        "project_id" to build.projectId
-                )
-
-                val resource = MonitoredResource.newBuilder().setType("global").putAllLabels(resourceLabels).build()
-
-                val interval = TimeInterval.newBuilder().setEndTime(Timestamps.parse(build.finishTime))
-                val value = TypedValue.newBuilder().setBoolValue(build.status == BuildStatus.SUCCESS).build()
-                val point = Point.newBuilder().setInterval(interval).setValue(value).build()
-
-                val timeSeries = TimeSeries.newBuilder().setMetric(metric).setResource(resource).addPoints(point).build()
-
-                val request = CreateTimeSeriesRequest.newBuilder()
-                        .setName(project.toString())
-                        .addTimeSeries(timeSeries)
-                        .build()
-
-                metricServiceClient.createTimeSeries(request)
+            ErrorStatsServiceClient.create().use { errorStatsServiceClient ->
+                val serviceContextFilter = ServiceContextFilter.newBuilder().setService(service).setVersion(version).build()
+                val listGroupStatsRequest = ListGroupStatsRequest.newBuilder().setServiceFilter(serviceContextFilter).build()
+                val groupStats = errorStatsServiceClient.listGroupStats(listGroupStatsRequest)
+                println(groupStats)
             }
-            catch (e: RuntimeException) {
-                LOG.error("Error sending metric", e)
+
+            ReportErrorsServiceClient.create().use { reportErrorsServiceClient ->
+                val serviceContext = ServiceContext.newBuilder().setService(service).setVersion(version).build()
+
+                val message = """
+                    Build.Trigger.Failed: ${build.buildTriggerId}
+                        at asdf
+                        at zxcv
+                """.trimIndent()
+
+                val errorContext = ErrorContext.newBuilder().setReportLocation(SourceLocation.getDefaultInstance()).build()
+
+                val customErrorEvent = ReportedErrorEvent.getDefaultInstance()
+                        .toBuilder()
+                        .setEventTime(Timestamps.fromMillis(System.currentTimeMillis())) //.parse(build.finishTime))
+                        .setContext(errorContext)
+                        .setServiceContext(serviceContext)
+                        .setMessage(message)
+                        .build()
+
+                reportErrorsServiceClient.reportErrorEvent(projectName, customErrorEvent)
+
+                ErrorGroupServiceClient.create().use { errorGroupServiceClient ->
+                    errorGroupServiceClient.
+                }
             }
         }
     }

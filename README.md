@@ -17,14 +17,22 @@ Run Locally:
     gcloud iam service-accounts create cloud-build-notifier-dev \
       --project=$GOOGLE_CLOUD_PROJECT
    
+    #gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    #  --member=serviceAccount:cloud-build-notifier-dev@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com \
+    #  --role=roles/monitoring.metricWriter &> /dev/null
+   
     gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
       --member=serviceAccount:cloud-build-notifier-dev@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com \
-      --role=roles/monitoring.metricWriter &> /dev/null
+      --role=roles/errorreporting.writer &> /dev/null
    
     gcloud iam service-accounts keys create /tmp/cloud-build-notifier-dev.json --iam-account=cloud-build-notifier-dev@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com
     ```
 
 1. 
+    ```
+    
+    gcloud services enable --project="${GOOGLE_CLOUD_PROJECT}" clouderrorreporting.googleapis.com
+    ```
 1. Start the app:
     ```
     GOOGLE_APPLICATION_CREDENTIALS=/tmp/cloud-build-notifier-dev.json ./gradlew -t run
